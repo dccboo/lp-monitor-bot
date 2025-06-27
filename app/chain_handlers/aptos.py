@@ -1,4 +1,4 @@
-from aptos_sdk.client import RestClient
+from aptos_sdk.async_client import RestClient
 import logging
 
 logger = logging.getLogger(__name__)
