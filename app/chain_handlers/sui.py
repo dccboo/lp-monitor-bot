@@ -1,7 +1,4 @@
-from sui_python import SuiClient
-import logging
-
-logger = logging.getLogger(__name__)
+from pysui import SuiClient  # 修改导入语句
 
 class SuiHandler:
     def __init__(self, config):
