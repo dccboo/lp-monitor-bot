@@ -1,11 +1,13 @@
+buildCommand: |
+  pip install --no-cache-dir -r app/requirements.txt
 services:
   - type: web
     name: lp-monitor-bot
     runtime: python
     buildCommand: |
+      python -m pip install --upgrade pip
       pip install -r app/requirements.txt
-    startCommand: |
-      python app/main.py
+    startCommand: python app/main.py
     envVars:
       - key: BOT_TOKEN
         sync: false

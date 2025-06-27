@@ -1,17 +1,26 @@
-from pysui import SuiClient  # 修改导入语句
+import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 class SuiHandler:
     def __init__(self, config):
-        self.client = SuiClient(config['rpc_url'])
+        self.rpc_url = config['rpc_url']
         
     def get_lp_status(self, contract_address, monitor_address):
         try:
-            # 示例查询（需要根据实际合约调整）
-            objects = self.client.get_objects(monitor_address)
-            has_lp = any('liquidity' in obj['type'] for obj in objects)
+            payload = {
+                "jsonrpc": "2.0",
+                "method": "suix_getBalance",
+                "params": [monitor_address],
+                "id": 1
+            }
+            response = requests.post(self.rpc_url, json=payload).json()
+            balance = response.get('result', {}).get('totalBalance', 0)
             
             return {
-                'active': has_lp,
+                'active': balance > 0,
+                'balance': str(balance),
                 'action': None
             }
         except Exception as e:
