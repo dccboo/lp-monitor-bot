@@ -1,0 +1,8 @@
+python-telegram-bot==20.3
+web3==6.10.0
+apscheduler==3.10.1
+aptos-sdk==0.7.1
+sui-py==0.29.1
+python-dotenv==1.0.0
+sqlalchemy==2.0.23
+flask==2.3.2

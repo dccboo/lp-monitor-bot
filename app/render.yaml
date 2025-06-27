@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: lp-monitor-bot
+    runtime: python
+    buildCommand: |
+      pip install -r app/requirements.txt
+    startCommand: |
+      python app/main.py
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: ETH_RPC_URL
+        sync: false
+      - key: APTOS_RPC_URL
+        sync: false
+      - key: SUI_RPC_URL
+        sync: false
+      - key: PORT
+        value: 8443
