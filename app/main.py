@@ -11,7 +11,38 @@ from chain_handlers.ethereum import EthereumHandler
 from chain_handlers.aptos import AptosHandler
 from chain_handlers.sui import SuiHandler
 from flask import Flask, jsonify
+import sqlite3
+from datetime import datetime
 
+# 数据库配置（添加到文件开头，其他import之后）
+DB_CONFIG = {
+    'db_name': os.getenv('DB_PATH', 'db/tasks.db')  # 优先使用环境变量，否则用本地路径
+}
+
+def init_db():
+    """初始化数据库和表结构"""
+    conn = sqlite3.connect(DB_CONFIG['db_name'])
+    cursor = conn.cursor()
+    
+    # 创建监控任务表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS monitor_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            chain TEXT NOT NULL,
+            contract_address TEXT NOT NULL,
+            monitor_address TEXT NOT NULL,
+            last_state TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, chain, contract_address, monitor_address)
+        )
+    ''')
+    
+    # 创建索引
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_user ON monitor_tasks(user_id)')
+    
+    conn.commit()
+    conn.close()
 # 加载环境变量
 load_dotenv()
 
@@ -85,28 +116,98 @@ def run_flask():
 
 if __name__ == '__main__':
     # 启动Flask
-    from threading import Thread
-    Thread(target=run_flask).start()
+    Thread(target=lambda: app.run(port=8000, host='0.0.0.0')).start()
 
     # 创建Bot应用
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # 添加对话处理器
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('add', start_add)],
+    # 设置webhook（Render适用）
+    await application.bot.set_webhook(
+        url=f"https://your-render-app.onrender.com/{BOT_TOKEN}",
+        allowed_updates=Update.ALL_TYPES
+    )
+    
+    # 启动webhook模式
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=8443,
+        secret_token='WEBHOOK_SECRET',
+        webhook_url=f"https://your-render-app.onrender.com/{BOT_TOKEN}"
+    )
+# 在原有代码基础上添加以下内容
+
+async def list_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """显示所有监控任务"""
+    user_id = update.message.from_user.id
+    conn = sqlite3.connect(DB_CONFIG['db_name'])
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT * FROM monitor_tasks WHERE user_id = ?', (user_id,))
+    tasks = cursor.fetchall()
+    conn.close()
+
+    if not tasks:
+        await update.message.reply_text("您当前没有监控任务")
+        return
+
+    message = "📋 您的监控任务：\n\n"
+    for task in tasks:
+        task_id, _, chain, contract, monitor, _, _ = task
+        message += (
+            f"🔹 ID: {task_id}\n"
+            f"区块链: {chain.upper()}\n"
+            f"合约地址: {contract[:6]}...{contract[-4:]}\n"
+            f"监控地址: {monitor[:6]}...{monitor[-4:]}\n"
+            f"────────────────\n"
+        )
+    await update.message.reply_text(message)
+
+async def remove_task_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """开始删除流程"""
+    await update.message.reply_text("请输入要删除的任务ID（使用/list查看ID）:")
+    return 'REMOVE_TASK'
+
+async def remove_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """执行删除操作"""
+    try:
+        task_id = int(update.message.text)
+        user_id = update.message.from_user.id
+        
+        conn = sqlite3.connect(DB_CONFIG['db_name'])
+        cursor = conn.cursor()
+        
+        # 验证任务属于该用户
+        cursor.execute('SELECT 1 FROM monitor_tasks WHERE id = ? AND user_id = ?',
+                      (task_id, user_id))
+        if not cursor.fetchone():
+            await update.message.reply_text("❌ 任务ID不存在或不属于您")
+            return ConversationHandler.END
+            
+        cursor.execute('DELETE FROM monitor_tasks WHERE id = ?', (task_id,))
+        conn.commit()
+        conn.close()
+        
+        await update.message.reply_text(f"✅ 已成功删除任务 {task_id}")
+    except ValueError:
+        await update.message.reply_text("❌ 请输入有效的数字ID")
+    finally:
+        return ConversationHandler.END
+
+# 在 main() 函数中添加处理器：
+def main():
+    init_db()
+    # ... 原有代码 ...
+    application = Application.builder().token(BOT_TOKEN).build()
+    # 添加新命令处理器
+    application.add_handler(CommandHandler("list", list_tasks))
+    
+    remove_conv = ConversationHandler(
+        entry_points=[CommandHandler("remove", remove_task_start)],
         states={
-            CHAIN: [CallbackQueryHandler(chain_selected, pattern='^chain_')],
-            CONTRACT_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_contract_address)],
-            MONITOR_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_monitor_address)],
+            'REMOVE_TASK': [MessageHandler(filters.TEXT & ~filters.COMMAND, remove_task)]
         },
         fallbacks=[CommandHandler('cancel', cancel)]
     )
-    application.add_handler(conv_handler)
-
-    # 定时任务
-    scheduler = AsyncIOScheduler()
-    scheduler.add_job(check_lp_status, 'interval', minutes=5, args=[application])
-    scheduler.start()
-
-    # 启动Bot
-    application.run_polling()
+    application.add_handler(remove_conv)
+    
+    # ... 其余原有代码 ...

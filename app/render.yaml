@@ -7,8 +7,11 @@ services:
     buildCommand: |
       python -m pip install --upgrade pip
       pip install --no-cache-dir -r app/requirements.txt
-    startCommand: python app/main.py
+startCommand: |
+  python app/main.py
     envVars:
+      - key: DB_PATH
+        value: /var/data/lp_monitor.db
       - key: BOT_TOKEN
         sync: false
       - key: ETH_RPC_URL

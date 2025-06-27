@@ -1,0 +1,3 @@
+ssh-keygen -t ed25519 -C "cccc@sent.com"  回车回车进去
+
+cd ~/lp-monitor-bot #定位到文件夹
