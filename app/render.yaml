@@ -6,7 +6,7 @@ services:
     runtime: python
     buildCommand: |
       python -m pip install --upgrade pip
-      pip install -r app/requirements.txt
+      pip install --no-cache-dir -r app/requirements.txt
     startCommand: python app/main.py
     envVars:
       - key: BOT_TOKEN
